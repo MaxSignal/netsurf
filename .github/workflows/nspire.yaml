@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [nspire]
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Make a release with this tag (e.g. nspire-v1.0); empty: just build'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -77,11 +82,13 @@ jobs:
         name: NetSurf-nspire
         path: dist/NetSurf-nspire
 
-    - name: Release (tags nspire-*)
-      if: startsWith(github.ref, 'refs/tags/nspire-')
+    - name: Release (tags nspire-*, or a tag given when run by hand)
+      if: startsWith(github.ref, 'refs/tags/nspire-') || inputs.release != ''
       uses: softprops/action-gh-release@v2
       with:
-        name: NetSurf for TI-Nspire ${{ github.ref_name }}
+        tag_name: ${{ inputs.release || github.ref_name }}
+        target_commitish: ${{ github.sha }}
+        name: NetSurf for TI-Nspire ${{ inputs.release || github.ref_name }}
         body: |
           NetSurf web browser for the TI-Nspire CX / CX CAS (Ndless), online
           through the USB cable (the calculator becomes a USB network adapter;
