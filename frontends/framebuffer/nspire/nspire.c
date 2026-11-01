@@ -27,6 +27,7 @@
  *   netsurf_urls.tns        history
  *   netsurf_net.cfg.tns     USB network settings (net_glue.c)
  *   netsurf_log.txt.tns     the frontend's log
+ *   netsurf_search.tns      search engines (written on the first start)
  *   nspire_ca.pem.tns       extra root certificates (optional)
  *   netsurf_verbose.tns     if present: NetSurf's own log goes to
  *                           netsurf_verbose_log.txt.tns
@@ -167,6 +168,41 @@ nserror nspire_url_from_text(const char *text, struct nsurl **url)
 	return search_web_omni(text, SEARCH_WEB_OMNI_SEARCHONLY, url);
 }
 
+/* Search engines that give a plain browser plain result pages (the
+ * DuckDuckGo HTML page NetSurf uses elsewhere answers it with an image
+ * CAPTCHA). The first one is used unless Choices names another with
+ * search_web_provider. NetSurf's format: name|host|URL (%s: the
+ * words)|icon URL| per line, no comments. */
+static const char default_search_engines[] =
+	"Bing|www.bing.com|https://www.bing.com/search?q=%s|https://www.bing.com/favicon.ico|\n"
+	"Wikipedia|en.m.wikipedia.org|https://en.m.wikipedia.org/w/index.php?search=%s|https://en.m.wikipedia.org/favicon.ico|\n"
+	"Wiby|wiby.me|https://wiby.me/?q=%s|https://wiby.me/favicon.ico|\n"
+	"DuckDuckGo Lite|lite.duckduckgo.com|https://lite.duckduckgo.com/lite/?q=%s|https://duckduckgo.com/favicon.ico|\n"
+	"Google|www.google.com|https://www.google.com/search?q=%s|https://www.google.com/favicon.ico|\n";
+
+static void search_engines_init(void)
+{
+	char path[300];
+	struct stat st;
+	FILE *f;
+
+	snprintf(path, sizeof(path), "%s/netsurf_search.tns", nspire_app_dir());
+	if (stat(path, &st) != 0) {
+		f = fopen(path, "w");
+		if (f != NULL) {
+			fputs(default_search_engines, f);
+			fclose(f);
+		}
+	}
+	if (search_web_init(path) != NSERROR_OK) {
+		nspire_log("search: cannot read %s\n", path);
+		return;
+	}
+	if (nsoption_charp(search_web_provider) != NULL &&
+	    nsoption_charp(search_web_provider)[0] != '\0')
+		search_web_select_provider(nsoption_charp(search_web_provider));
+}
+
 const char *nspire_app_dir_respath(void)
 {
 	return nspire_app_dir();
@@ -193,6 +229,7 @@ nserror nspire_init(void)
 	nsoption_set_charp(cookie_file, strdup(path));
 	nsoption_set_charp(cookie_jar, strdup(path));
 
+	search_engines_init();
 	nspire_net_start();
 	return NSERROR_OK;
 }

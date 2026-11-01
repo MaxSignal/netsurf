@@ -63,8 +63,15 @@ The first page is a short help page (`var` brings it back).
 | home (on) | quit |
 
 In the address bar, `example.com` becomes `https://example.com/`, `pc:8000/x`
-and plain addresses become `http://...`, and anything else is a web search
-(DuckDuckGo).
+and plain addresses become `http://...`, and anything else is a web search.
+
+Searches (the start page's search box, words in the address bar) go to the
+first engine in `netsurf_search.tns`, written next to the program on the
+first start: Bing, Wikipedia, Wiby, DuckDuckGo Lite, Google. Move a line to
+the top, or put `search_web_provider:Wikipedia` into `netsurf_choices.tns`,
+to use another. One engine per line, `name|host|URL|icon URL|` with `%s`
+for the words; no comment lines. (DuckDuckGo's HTML page, NetSurf's usual
+default, answers NetSurf with an image CAPTCHA instead of results.)
 
 ### Files next to the program
 
@@ -73,6 +80,7 @@ All names end in `.tns`, which TI's software requires to transfer them.
 | File | |
 | --- | --- |
 | `netsurf_net.cfg.tns` | network settings, written on the first start (below) |
+| `netsurf_search.tns` | search engines, written on the first start (above) |
 | `netsurf_choices.tns` | NetSurf options ([Choices format](../../../docs/netsurf-options.md)), optional |
 | `netsurf_cookies.tns`, `netsurf_urls.tns` | cookies and history, kept between runs |
 | `netsurf_log.txt.tns` | the frontend's log: network, TLS, the TI-OS stack |

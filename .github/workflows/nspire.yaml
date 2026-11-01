@@ -81,4 +81,14 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/nspire-')
       uses: softprops/action-gh-release@v2
       with:
-        files: dist/NetSurf-nspire.tar.gz
+        name: NetSurf for TI-Nspire ${{ github.ref_name }}
+        body: |
+          NetSurf web browser for the TI-Nspire CX / CX CAS (Ndless), online
+          through the USB cable (the calculator becomes a USB network adapter;
+          share the computer's Internet connection with it).
+
+          Copy `netsurf.tns` to the calculator and open it with Ndless.
+          Keys, network setup and settings files: README.md in the archive.
+        files: |
+          dist/NetSurf-nspire/netsurf.tns
+          dist/NetSurf-nspire.tar.gz
