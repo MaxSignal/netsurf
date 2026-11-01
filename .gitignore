@@ -25,3 +25,5 @@ NetSurf
 core
 nsfb-*
 build
+netsurf.elf
+netsurf.tns

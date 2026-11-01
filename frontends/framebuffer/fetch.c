@@ -34,6 +34,10 @@
 #include "framebuffer/findfile.h"
 #include "framebuffer/fetch.h"
 
+#ifdef NETSURF_FB_NSPIRE
+#include "framebuffer/nspire/nspire.h"
+#endif
+
 
 /**
  * Translate resource to full url.
@@ -95,6 +99,11 @@ static struct gui_fetch_table fetch_table = {
 	.filetype = fetch_filetype,
 
 	.get_resource_url = get_resource_url,
+#ifdef NETSURF_FB_NSPIRE
+	/* built into the program */
+	.get_resource_data = nspire_get_resource_data,
+	.release_resource_data = nspire_release_resource_data,
+#endif
 };
 
 struct gui_fetch_table *framebuffer_fetch_table = &fetch_table;

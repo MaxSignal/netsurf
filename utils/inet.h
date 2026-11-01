@@ -49,6 +49,29 @@
 #define ns_close_socket CloseSocket
 #endif
 
+#elif defined(HAVE_NO_INET_HEADERS)
+
+/* No sockets: just the types and constants the core refers to. */
+#include <stdint.h>
+#include <sys/select.h>
+
+#ifndef AF_INET
+#define AF_INET 2
+#endif
+#ifndef AF_INET6
+#define AF_INET6 10
+#endif
+
+struct in_addr {
+	uint32_t s_addr;
+};
+
+struct in6_addr {
+	uint8_t s6_addr[16];
+};
+
+#define ns_close_socket(s) (-1)
+
 #else
 
 #include <winsock2.h>

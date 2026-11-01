@@ -1,0 +1,306 @@
+From 8798d599569e7fffbf7422935c8f919f5dc30ba9 Mon Sep 17 00:00:00 2001
+From: kastera58 <kastera58@gmail.com>
+Date: Sun, 1 Nov 2026 01:20:12 +0000
+Subject: [PATCH] Add a TI-Nspire surface
+
+---
+ Makefile                 |   6 ++
+ include/libnsfb.h        |   1 +
+ include/libnsfb_nspire.h |  34 ++++++++
+ src/plot.h               |   5 ++
+ src/surface/Makefile     |   1 +
+ src/surface/nspire.c     | 178 +++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 225 insertions(+)
+ create mode 100644 include/libnsfb_nspire.h
+ create mode 100644 src/surface/nspire.c
+
+diff --git a/Makefile b/Makefile
+index e70cffb..6c34df3 100644
+--- a/Makefile
++++ b/Makefile
+@@ -48,6 +48,9 @@ $(eval $(call pkg_config_package_available,NSFB_SDL_AVAILABLE,sdl))
+ $(eval $(call pkg_config_package_available,NSFB_XCB_AVAILABLE,$(NSFB_XCB_PKG_NAMES)))
+ $(eval $(call pkg_config_package_available,NSFB_WLD_AVAILABLE,wayland-client))
+ 
++# The TI-Nspire surface (the program supplies the machine side)
++NSFB_NSPIRE_AVAILABLE ?= no
++
+ # Flags and setup for each support library
+ ifeq ($(NSFB_SDL_AVAILABLE),yes)
+   $(eval $(call pkg_config_package_add_flags,sdl,CFLAGS))
+@@ -119,5 +122,8 @@ INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsfb_plot.h
+ INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsfb_plot_util.h
+ INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsfb_event.h
+ INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsfb_cursor.h
++ifeq ($(NSFB_NSPIRE_AVAILABLE),yes)
++  INSTALL_ITEMS := $(INSTALL_ITEMS) $(I):include/libnsfb_nspire.h
++endif
+ INSTALL_ITEMS := $(INSTALL_ITEMS) /$(LIBDIR)/pkgconfig:lib$(COMPONENT).pc.in
+ INSTALL_ITEMS := $(INSTALL_ITEMS) /$(LIBDIR):$(OUTPUT)
+diff --git a/include/libnsfb.h b/include/libnsfb.h
+index 674df65..686ed48 100644
+--- a/include/libnsfb.h
++++ b/include/libnsfb.h
+@@ -42,6 +42,7 @@ enum nsfb_type_e {
+     NSFB_SURFACE_LINUX, /**< Linux framebuffer surface */
+     NSFB_SURFACE_ABLE, /**< ABLE framebuffer surface */
+     NSFB_SURFACE_RAM, /**< RAM surface */
++    NSFB_SURFACE_NSPIRE, /**< TI-Nspire LCD surface */
+     NSFB_SURFACE_COUNT, /**< The number of surface kinds */
+ };
+ 
+diff --git a/include/libnsfb_nspire.h b/include/libnsfb_nspire.h
+new file mode 100644
+index 0000000..58c5807
+--- /dev/null
++++ b/include/libnsfb_nspire.h
+@@ -0,0 +1,34 @@
++/*
++ * Copyright 2026 The NetSurf Browser Project
++ *
++ * This file is part of libnsfb, http://www.netsurf-browser.org/
++ * Licenced under the MIT License,
++ *                http://www.opensource.org/licenses/mit-license.php
++ *
++ * The "nspire" surface: a 16 bpp RGB565 frame held in RAM. The program
++ * linking libnsfb supplies the machine side (the TI-Nspire's LCD and keypad,
++ * on the calculator) through the functions declared here.
++ */
++
++#ifndef LIBNSFB_NSPIRE_H
++#define LIBNSFB_NSPIRE_H 1
++
++#include <stdbool.h>
++#include <stdint.h>
++
++#include "libnsfb.h"
++#include "libnsfb_event.h"
++
++/** Prepare the screen; set the size of the frame. 0 on success. */
++int nsfb_nspire_open(int *width, int *height);
++
++/** Give the screen back. */
++void nsfb_nspire_close(void);
++
++/** Show the area @a box of the frame (RGB565, @a stride pixels a row). */
++void nsfb_nspire_present(const uint16_t *frame, int stride, const nsfb_bbox_t *box);
++
++/** Wait up to @a timeout ms (-1: forever) for input; true if @a event set. */
++bool nsfb_nspire_input(nsfb_event_t *event, int timeout);
++
++#endif
+diff --git a/src/plot.h b/src/plot.h
+index db60ea9..d9308b3 100644
+--- a/src/plot.h
++++ b/src/plot.h
+@@ -35,6 +35,11 @@
+     #if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
+         #define NSFB_BE_BYTE_ORDER
+     #endif
++#elif defined(_TINSPIRE)
++    /* newlib for the TI-Nspire has no endian.h; the compiler knows */
++    #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++        #define NSFB_BE_BYTE_ORDER
++    #endif
+ #elif defined(__FreeBSD__)
+     /* freebsd has the include somewhere different */
+     #include <machine/endian.h>
+diff --git a/src/surface/Makefile b/src/surface/Makefile
+index 848c3d4..60384e5 100644
+--- a/src/surface/Makefile
++++ b/src/surface/Makefile
+@@ -8,6 +8,7 @@ SURFACE_HANDLER_$(NSFB_SDL_AVAILABLE) += sdl.c
+ SURFACE_HANDLER_$(NSFB_XCB_AVAILABLE) += x.c
+ SURFACE_HANDLER_$(NSFB_VNC_AVAILABLE) += vnc.c
+ SURFACE_HANDLER_$(NSFB_WLD_AVAILABLE) += wld.c
++SURFACE_HANDLER_$(NSFB_NSPIRE_AVAILABLE) += nspire.c
+ 
+ DIR_SOURCES := $(SURFACE_HANDLER_yes)
+ 
+diff --git a/src/surface/nspire.c b/src/surface/nspire.c
+new file mode 100644
+index 0000000..894ee9b
+--- /dev/null
++++ b/src/surface/nspire.c
+@@ -0,0 +1,178 @@
++/*
++ * Copyright 2026 The NetSurf Browser Project
++ *
++ * This file is part of libnsfb, http://www.netsurf-browser.org/
++ * Licenced under the MIT License,
++ *                http://www.opensource.org/licenses/mit-license.php
++ *
++ * TI-Nspire surface: the frame is RGB565 in RAM; showing it and reading the
++ * keypad are left to the program (libnsfb_nspire.h), which knows the
++ * calculator it runs on.
++ */
++
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdlib.h>
++
++#include "libnsfb.h"
++#include "libnsfb_plot.h"
++#include "libnsfb_plot_util.h"
++#include "libnsfb_event.h"
++#include "libnsfb_nspire.h"
++
++#include "nsfb.h"
++#include "surface.h"
++#include "plot.h"
++#include "cursor.h"
++
++static int nspire_defaults(nsfb_t *nsfb)
++{
++    nsfb->width = 320;
++    nsfb->height = 240;
++    nsfb->format = NSFB_FMT_RGB565;
++
++    select_plotters(nsfb);
++
++    return 0;
++}
++
++static int nspire_initialise(nsfb_t *nsfb)
++{
++    int width = nsfb->width;
++    int height = nsfb->height;
++    uint8_t *fbptr;
++
++    if (nsfb_nspire_open(&width, &height) != 0)
++        return -1;
++
++    /* the machine decides the size; only RGB565 is shown */
++    nsfb->width = width;
++    nsfb->height = height;
++    nsfb->format = NSFB_FMT_RGB565;
++    select_plotters(nsfb);
++
++    fbptr = calloc((size_t)nsfb->width * nsfb->height, 2);
++    if (fbptr == NULL) {
++        nsfb_nspire_close();
++        return -1;
++    }
++    nsfb->ptr = fbptr;
++    nsfb->linelen = nsfb->width * 2;
++
++    return 0;
++}
++
++static int nspire_set_geometry(nsfb_t *nsfb, int width, int height,
++                               enum nsfb_format_e format)
++{
++    /* the LCD has one size and one format */
++    if ((nsfb->ptr != NULL) &&
++        ((width > 0 && width != nsfb->width) ||
++         (height > 0 && height != nsfb->height)))
++        return -1;
++
++    if (nsfb->ptr == NULL) {
++        if (width > 0)
++            nsfb->width = width;
++        if (height > 0)
++            nsfb->height = height;
++    }
++    (void)format;
++    nsfb->format = NSFB_FMT_RGB565;
++    select_plotters(nsfb);
++    nsfb->linelen = nsfb->width * 2;
++
++    return 0;
++}
++
++static int nspire_finalise(nsfb_t *nsfb)
++{
++    nsfb_nspire_close();
++    free(nsfb->ptr);
++    nsfb->ptr = NULL;
++
++    return 0;
++}
++
++static bool nspire_input(nsfb_t *nsfb, nsfb_event_t *event, int timeout)
++{
++    (void)nsfb;
++    return nsfb_nspire_input(event, timeout);
++}
++
++static int nspire_claim(nsfb_t *nsfb, nsfb_bbox_t *box)
++{
++    struct nsfb_cursor_s *cursor = nsfb->cursor;
++
++    if ((cursor != NULL) &&
++        (cursor->plotted == true) &&
++        (nsfb_plot_bbox_intersect(box, &cursor->loc))) {
++        nsfb_cursor_clear(nsfb, cursor);
++    }
++    return 0;
++}
++
++static void nspire_show(nsfb_t *nsfb, nsfb_bbox_t *box)
++{
++    nsfb_bbox_t fbarea = { 0, 0, nsfb->width, nsfb->height };
++
++    nsfb_plot_clip(&fbarea, box);
++    if ((box->x1 <= box->x0) || (box->y1 <= box->y0))
++        return;
++    nsfb_nspire_present((const uint16_t *)nsfb->ptr, nsfb->width, box);
++}
++
++static int nspire_update(nsfb_t *nsfb, nsfb_bbox_t *box)
++{
++    struct nsfb_cursor_s *cursor = nsfb->cursor;
++    nsfb_bbox_t area = *box;
++
++    if ((cursor != NULL) && (cursor->plotted == false)) {
++        nsfb_cursor_plot(nsfb, cursor);
++    }
++
++    nspire_show(nsfb, &area);
++
++    return 0;
++}
++
++static int nspire_cursor(nsfb_t *nsfb, struct nsfb_cursor_s *cursor)
++{
++    nsfb_bbox_t redraw;
++
++    if ((cursor != NULL) && (cursor->plotted == true)) {
++        nsfb_bbox_t loc_shift = cursor->loc;
++        loc_shift.x0 -= cursor->hotspot_x;
++        loc_shift.y0 -= cursor->hotspot_y;
++        loc_shift.x1 -= cursor->hotspot_x;
++        loc_shift.y1 -= cursor->hotspot_y;
++
++        nsfb_plot_add_rect(&cursor->savloc, &loc_shift, &redraw);
++
++        nsfb_cursor_clear(nsfb, cursor);
++        nsfb_cursor_plot(nsfb, cursor);
++
++        nspire_show(nsfb, &redraw);
++    }
++    return true;
++}
++
++const nsfb_surface_rtns_t nspire_rtns = {
++    .defaults = nspire_defaults,
++    .initialise = nspire_initialise,
++    .finalise = nspire_finalise,
++    .input = nspire_input,
++    .claim = nspire_claim,
++    .update = nspire_update,
++    .cursor = nspire_cursor,
++    .geometry = nspire_set_geometry,
++};
++
++NSFB_SURFACE_DEF(nspire, NSFB_SURFACE_NSPIRE, &nspire_rtns)
++
++/*
++ * Local variables:
++ *  c-basic-offset: 4
++ *  tab-width: 8
++ * End:
++ */
+-- 
+2.43.0
+

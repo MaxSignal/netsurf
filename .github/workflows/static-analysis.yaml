@@ -2,6 +2,13 @@ name: "Static Analysis"
 
 on: [push]
 
+# CodeQL uploads its results to the repository's code scanning; with
+# read-only default token permissions that upload is refused.
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
   codeql:
     name: codeql

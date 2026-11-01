@@ -457,6 +457,14 @@ char *strchrnul (const char *s, int c_in)
 #include "utils/utsname.h"
 
 int uname(struct utsname *buf) {
+#if defined(_TINSPIRE)
+	strcpy(buf->sysname,"TI-Nspire");
+	strcpy(buf->nodename,"nspire");
+	strcpy(buf->release,"Ndless");
+	strcpy(buf->version,"");
+	strcpy(buf->machine,"arm");
+	return 0;
+#endif
 	strcpy(buf->sysname,"windows");
 	strcpy(buf->nodename,"nodename");
 	strcpy(buf->release,"release");

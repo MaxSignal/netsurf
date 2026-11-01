@@ -1,0 +1,76 @@
+# -*- mode: makefile-gmake -*-
+#
+# TI-Nspire: the framebuffer frontend on libnsfb's "nspire" surface, with
+# the USB network (CDC NCM + lwIP) and its own HTTP/HTTPS fetcher.
+# Included by frontends/framebuffer/Makefile for NETSURF_FB_FRONTEND=nspire.
+#
+#   NSPIRE_NS_ENV    where scripts/deps.sh put the libraries and sources
+#
+# See frontends/framebuffer/nspire/README.md.
+
+NSPIRE_NS_ENV ?= $(HOME)/nspire/netsurf-env
+NSPIRE_LWIP := $(NSPIRE_NS_ENV)/src/lwip/src
+NSPIRE_SRC := $(FRONTEND_SOURCE_DIR)/nspire
+NSPIRE_VERSION ?= $(shell git describe --always --dirty 2>/dev/null || echo dev)
+
+CFLAGS += -DNETSURF_FB_NSPIRE -I$(NSPIRE_SRC)/net -I$(NSPIRE_LWIP)/include \
+	-DNSPIRE_BUILD_EPOCH=$(shell date +%s)u \
+	'-DNSPIRE_VERSION="$(NSPIRE_VERSION)"'
+
+S_FRONTEND += nspire/nspire.c nspire/surface.c nspire/net_glue.c \
+	nspire/fetch_http.c nspire/tls.c \
+	nspire/net/usbd_ci.c nspire/net/ncm.c nspire/net/nnet.c
+
+S_FRONTEND += nspire/sys_device.c nspire/net/nnet_port_device.c
+CFLAGS += -ffunction-sections -fdata-sections
+# newlib's clock comes from the RTC in whole seconds under Ndless
+# (sys_device.c has a 32 kHz one); 8-byte aligned heap blocks.
+LDFLAGS += -llwip -lmbedtls -lmbedx509 -lmbedcrypto -liconv \
+	-Wl,--gc-sections -Wl,--wrap=_gettimeofday \
+	-Wl,--wrap=malloc,--wrap=free,--wrap=realloc,--wrap=calloc
+EXETARGET := netsurf.elf
+POSTEXES += netsurf.tns
+
+# Built-in resources and root certificates
+NSPIRE_RES_DIR := $(FRONTEND_RESOURCES_DIR)
+NSPIRE_RESOURCES := \
+	Messages=$(MESSAGES_TARGET)/en/Messages \
+	adblock.css=$(NSPIRE_RES_DIR)/adblock.css \
+	default.css=$(NSPIRE_RES_DIR)/default.css \
+	internal.css=$(NSPIRE_RES_DIR)/internal.css \
+	quirks.css=$(NSPIRE_RES_DIR)/quirks.css \
+	credits.html=$(NSPIRE_RES_DIR)/credits.html \
+	licence.html=$(NSPIRE_RES_DIR)/licence.html \
+	welcome.html=$(NSPIRE_SRC)/res/welcome.html \
+	netsurf.png=$(NSPIRE_RES_DIR)/netsurf.png \
+	favicon.png=$(NSPIRE_RES_DIR)/favicon.png \
+	icons/arrow-l.png=resources/icons/arrow-l.png \
+	icons/content.png=resources/icons/content.png \
+	icons/directory.png=resources/icons/directory.png \
+	icons/directory2.png=resources/icons/directory2.png \
+	icons/hotlist-add.png=resources/icons/hotlist-add.png \
+	icons/hotlist-rmv.png=resources/icons/hotlist-rmv.png \
+	icons/search.png=resources/icons/search.png
+NSPIRE_CA_BUNDLE ?= resources/ca-bundle
+
+$(OBJROOT)/nspire-resources.c: $(NSPIRE_SRC)/scripts/mkres.py $(NSPIRE_CA_BUNDLE) \
+		$(foreach R,$(NSPIRE_RESOURCES),$(lastword $(subst =, ,$(R)))) $(OBJROOT)/created
+	$(VQ)echo "  MKRES: $@"
+	$(Q)python3 $(NSPIRE_SRC)/scripts/mkres.py $@ $(NSPIRE_CA_BUNDLE) $(NSPIRE_RESOURCES)
+
+S_IMAGES += $(OBJROOT)/nspire-resources.c
+
+# ELF -> Zehn -> .tns, the format Ndless runs
+netsurf.tns: $(EXETARGET)
+	$(VQ)echo " GENZEHN: $@"
+	$(Q)genzehn --input $(EXETARGET) --output $@.zehn --name "NetSurf" \
+		--author "The NetSurf Developers (TI-Nspire port)" \
+		--notice "Web browser over the USB cable" \
+		--version 1 --uses-lcd-blit true --240x320-support true --compress
+	$(Q)make-prg $@.zehn $@
+	$(Q)$(RM) $@.zehn
+
+clean-nspire:
+	$(VQ)echo "   CLEAN: netsurf.tns"
+	$(Q)$(RM) netsurf.tns netsurf.tns.zehn
+CLEANS += clean-nspire

@@ -189,6 +189,11 @@ S_FRONTEND += $(addprefix fbtk/,$(S_FRAMEBUFFER_FBTK))
 SOURCES = $(S_COMMON) $(S_IMAGE) $(S_BROWSER) $(S_FRONTEND) $(S_IMAGES) $(S_FONTS)
 EXETARGET := nsfb
 
+# The TI-Nspire (adds sources, flags and the .tns target)
+ifeq ($(NETSURF_FB_FRONTEND),nspire)
+  include $(FRONTEND_SOURCE_DIR)/nspire/Makefile.nspire
+endif
+
 # ----------------------------------------------------------------------------
 # Install target
 # ----------------------------------------------------------------------------

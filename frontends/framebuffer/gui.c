@@ -57,6 +57,10 @@
 #include "framebuffer/local_history.h"
 #include "framebuffer/corewindow.h"
 
+#ifdef NETSURF_FB_NSPIRE
+#include "framebuffer/nspire/nspire.h"
+#endif
+
 
 #define NSFB_TOOLBAR_DEFAULT_LAYOUT "blfsrutc"
 
@@ -488,6 +492,13 @@ process_cmdline(int argc, char** argv)
 	nsfb_enumerate_surface_types(framebuffer_pick_default_fename, NULL);
 
 	febpp = 32;
+#ifdef NETSURF_FB_NSPIRE
+	/* the calculator's LCD: one surface, one size */
+	fename = "nspire";
+	febpp = 16;
+	nsoption_set_int(window_width, 320);
+	nsoption_set_int(window_height, 240);
+#endif
 
 	fewidth = nsoption_int(window_width);
 	if (fewidth <= 0) {
@@ -598,6 +609,25 @@ static nserror set_defaults(struct nsoption_s *defaults)
 	for (idx=0; sys_colour_defaults[idx].nsc != NSOPTION_LISTEND; idx++) {
 		defaults[sys_colour_defaults[idx].nsc].value.c = sys_colour_defaults[idx].c;
 	}
+#ifdef NETSURF_FB_NSPIRE
+	/* 320x240: small furniture, small text */
+	defaults[NSOPTION_fb_furniture_size].value.i = 12;
+	defaults[NSOPTION_fb_toolbar_size].value.i = 22;
+	defaults[NSOPTION_font_size].value.i = 100;
+	defaults[NSOPTION_font_min_size].value.i = 70;
+	/* a slow processor, little memory, one cable */
+	defaults[NSOPTION_max_fetchers].value.i = 6;
+	defaults[NSOPTION_max_fetchers_per_host].value.i = 2;
+	defaults[NSOPTION_max_cached_fetch_handles].value.i = 4;
+	defaults[NSOPTION_memory_cache_size].value.i = 2 * 1024 * 1024;
+	defaults[NSOPTION_disc_cache_size].value.u = 0;
+	/* experimental features on (netsurf_choices.tns can turn them off):
+	 * JavaScript (Duktape), animations, decoded international domain
+	 * names in the address bar */
+	defaults[NSOPTION_enable_javascript].value.b = true;
+	defaults[NSOPTION_animate_images].value.b = true;
+	defaults[NSOPTION_display_decoded_idn].value.b = true;
+#endif
 	return NSERROR_OK;
 }
 
@@ -1169,7 +1199,19 @@ fb_url_enter(void *pw, char *text)
 	nsurl *url;
 	nserror error;
 
+#ifdef NETSURF_FB_NSPIRE
+	/* "example.com" or search words, as typed on the keypad; the page
+	 * gets the keys afterwards */
+	error = nspire_url_from_text(text, &url);
+	if (error == NSERROR_OK) {
+		struct gui_window *gw;
+		for (gw = window_list; gw != NULL; gw = gw->next)
+			if (gw->bw == bw)
+				fbtk_set_focus(gw->browser);
+	}
+#else
 	error = nsurl_create(text, &url);
+#endif
 	if (error != NSERROR_OK) {
 		fb_warn_user("Errorcode:", messages_get_errorcode(error));
 	} else {
@@ -1992,6 +2034,14 @@ gui_window_set_pointer(struct gui_window *g, gui_pointer_shape shape)
 static nserror
 gui_window_set_url(struct gui_window *g, nsurl *url)
 {
+#ifdef NETSURF_FB_NSPIRE
+	int x, y, h;
+
+	/* typing on the keypad is slow: a page finishing loading must not
+	 * replace what is being typed */
+	if (fbtk_get_caret(g->url, &x, &y, &h))
+		return NSERROR_OK;
+#endif
 	fbtk_set_text(g->url, nsurl_access(url));
 	return NSERROR_OK;
 }
@@ -2198,12 +2248,20 @@ main(int argc, char** argv)
 		.layout = framebuffer_layout_table,
 	};
 
+#ifdef NETSURF_FB_NSPIRE
+	nspire_early_init(&argc, &argv);
+#endif
+
         ret = netsurf_register(&framebuffer_table);
         if (ret != NSERROR_OK) {
 		die("NetSurf operation table failed registration");
         }
 
+#ifdef NETSURF_FB_NSPIRE
+	respaths = fb_init_resource_path(nspire_app_dir_respath());
+#else
 	respaths = fb_init_resource_path(NETSURF_FB_RESPATH":"NETSURF_FB_FONTPATH);
+#endif
 
 	/* initialise logging. Not fatal if it fails but not much we
 	 * can do about it either.
@@ -2215,6 +2273,16 @@ main(int argc, char** argv)
 	if (ret != NSERROR_OK) {
 		die("Options failed to initialise");
 	}
+#ifdef NETSURF_FB_NSPIRE
+	(void)options;
+	(void)messages;
+	nsoption_read(nspire_choices_path(), nsoptions);
+	nsoption_commandline(&argc, argv, nsoptions);
+	ret = nspire_messages_init();
+	if (ret != NSERROR_OK) {
+		fprintf(stderr, "Message translations failed to load\n");
+	}
+#else
 	options = filepath_find(respaths, "Choices");
 	nsoption_read(options, nsoptions);
 	free(options);
@@ -2227,6 +2295,7 @@ main(int argc, char** argv)
 	if (ret != NSERROR_OK) {
 		fprintf(stderr, "Message translations failed to load\n");
 	}
+#endif
 
 	/* common initialisation */
 	ret = netsurf_init(NULL);
@@ -2236,6 +2305,13 @@ main(int argc, char** argv)
 
 	/* Override, since we have no support for non-core SELECT menu */
 	nsoption_set_bool(core_select_menu, true);
+
+#ifdef NETSURF_FB_NSPIRE
+	ret = nspire_init();
+	if (ret != NSERROR_OK) {
+		die("TI-Nspire setup failed");
+	}
+#endif
 
 	if (process_cmdline(argc,argv) != true)
 		die("unable to process command line.\n");
@@ -2276,6 +2352,10 @@ main(int argc, char** argv)
 		browser_window_destroy(bw);
 	}
 
+#ifdef NETSURF_FB_NSPIRE
+	nspire_finalise();
+#endif
+
 	netsurf_exit();
 
 	if (fb_font_finalise() == false)
@@ -2286,6 +2366,10 @@ main(int argc, char** argv)
 
 	/* finalise logging */
 	nslog_finalise();
+
+#ifdef NETSURF_FB_NSPIRE
+	nspire_late_finalise();
+#endif
 
 	return 0;
 }
@@ -2324,3 +2408,118 @@ void gui_resize(fbtk_widget_t *root, int width, int height)
  * c-basic-offset:8
  * End:
  */
+
+#ifdef NETSURF_FB_NSPIRE
+/* TI-Nspire keypad actions and queries (framebuffer/nspire/nspire.h) */
+
+static struct gui_window *nspire_window(void)
+{
+	return input_window != NULL ? input_window : window_list;
+}
+
+/* exported interface documented in framebuffer/nspire/nspire.h */
+void fb_nspire_action(enum nspire_action action)
+{
+	struct gui_window *gw = nspire_window();
+	int x, y, h;
+
+	if (gw == NULL)
+		return;
+
+	switch (action) {
+	case NSPIRE_ACTION_BACK:
+		if (browser_window_back_available(gw->bw))
+			browser_window_history_back(gw->bw, false);
+		break;
+
+	case NSPIRE_ACTION_FORWARD:
+		if (browser_window_forward_available(gw->bw))
+			browser_window_history_forward(gw->bw, false);
+		break;
+
+	case NSPIRE_ACTION_RELOAD:
+		browser_window_reload(gw->bw, true);
+		break;
+
+	case NSPIRE_ACTION_HOME: {
+		nsurl *url;
+		const char *home = nsoption_charp(homepage_url);
+		if (home == NULL || home[0] == '\0')
+			home = NETSURF_HOMEPAGE;
+		if (nsurl_create(home, &url) == NSERROR_OK) {
+			browser_window_navigate(gw->bw, url, NULL,
+						BW_NAVIGATE_HISTORY, NULL, NULL, NULL);
+			nsurl_unref(url);
+		}
+		break;
+	}
+
+	case NSPIRE_ACTION_URLBAR: {
+		/* first press: an empty address bar to type into; a second
+		 * press brings the page's address back for editing */
+		static char *saved;
+		nsfb_event_t event;
+
+		if (fbtk_get_caret(gw->url, &x, &y, &h) && saved != NULL) {
+			fbtk_set_text(gw->url, saved);
+			free(saved);
+			saved = NULL;
+		} else {
+			nsurl *url = browser_window_access_url(gw->bw);
+			free(saved);
+			saved = url != NULL ? strdup(nsurl_access(url)) : NULL;
+			fbtk_set_text(gw->url, "");
+		}
+		fbtk_set_focus(gw->url);
+		event.type = NSFB_EVENT_KEY_DOWN;
+		event.value.keycode = NSFB_KEY_MOUSE_1;
+		fbtk_post_callback(gw->url, FBTK_CBT_CLICK, &event,
+				   fbtk_get_width(gw->url), 0);
+		break;
+	}
+
+	case NSPIRE_ACTION_UNFOCUS:
+		if (fbtk_get_caret(gw->url, &x, &y, &h)) {
+			fbtk_set_focus(gw->browser);
+		} else {
+			browser_window_key_press(gw->bw, NS_KEY_ESCAPE);
+		}
+		break;
+	}
+}
+
+/* exported interface documented in framebuffer/nspire/nspire.h */
+bool fb_nspire_text_input_active(void)
+{
+	struct gui_window *gw = nspire_window();
+	int x, y, h;
+
+	if (gw == NULL)
+		return false;
+	return fbtk_get_caret(gw->url, &x, &y, &h) ||
+		fbtk_get_caret(gw->browser, &x, &y, &h);
+}
+
+/* exported interface documented in framebuffer/nspire/nspire.h */
+void fb_nspire_status(const char *text)
+{
+	struct gui_window *gw;
+
+	for (gw = window_list; gw != NULL; gw = gw->next)
+		fbtk_set_text(gw->status, text);
+}
+
+/* exported interface documented in framebuffer/nspire/nspire.h */
+bool fb_nspire_browser_area(int *x0, int *y0, int *x1, int *y1)
+{
+	struct gui_window *gw = nspire_window();
+
+	if (gw == NULL)
+		return false;
+	*x0 = fbtk_get_absx(gw->browser);
+	*y0 = fbtk_get_absy(gw->browser);
+	*x1 = *x0 + fbtk_get_width(gw->browser);
+	*y1 = *y0 + fbtk_get_height(gw->browser);
+	return true;
+}
+#endif

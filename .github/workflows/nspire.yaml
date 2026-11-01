@@ -1,0 +1,84 @@
+name: "TI-Nspire Build"
+
+# NetSurf for the TI-Nspire (Ndless): netsurf.tns.
+# See frontends/framebuffer/nspire/README.md.
+
+on:
+  push:
+    branches: [nspire]
+    tags: ['nspire-*']
+  pull_request:
+    branches: [nspire]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  nspire:
+    name: 'TI-Nspire: netsurf.tns'
+    runs-on: ubuntu-24.04
+    env:
+      NSPIRE_HOME: ${{ github.workspace }}/../nspire
+      NSPIRE_NS_ENV: ${{ github.workspace }}/../nspire/netsurf-env
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: apt-get install packages
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get --no-install-recommends -y install \
+            build-essential cmake pkg-config git curl perl python3 \
+            gperf bison flex \
+            libpng-dev zlib1g-dev libexpat1-dev libboost-program-options-dev
+
+    - name: Cache the Ndless SDK
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.NSPIRE_HOME }}/prebuilt
+        key: ndless-sdk-${{ runner.os }}-v1
+
+    - name: Ndless SDK
+      run: frontends/framebuffer/nspire/scripts/sdk.sh
+
+    - name: Cache the libraries
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.NSPIRE_NS_ENV }}
+        key: nspire-libs-${{ runner.os }}-${{ hashFiles('frontends/framebuffer/nspire/scripts/deps.sh', 'frontends/framebuffer/nspire/patches/*', 'frontends/framebuffer/nspire/net/lwipopts.h', 'frontends/framebuffer/nspire/net/arch/*') }}
+
+    - name: Libraries for the calculator
+      run: |
+        . "$NSPIRE_HOME/env.sh"
+        frontends/framebuffer/nspire/scripts/deps.sh
+
+    - name: Build netsurf.tns
+      run: |
+        . "$NSPIRE_HOME/env.sh"
+        frontends/framebuffer/nspire/scripts/build.sh
+        ls -l netsurf.tns
+        arm-none-eabi-size netsurf.elf
+
+    - name: Package
+      run: |
+        mkdir -p dist/NetSurf-nspire
+        cp netsurf.tns dist/NetSurf-nspire/
+        cp frontends/framebuffer/nspire/README.md dist/NetSurf-nspire/README.md
+        cp COPYING dist/NetSurf-nspire/COPYING
+        (cd dist && tar czf NetSurf-nspire.tar.gz NetSurf-nspire)
+
+    - name: Upload netsurf.tns
+      uses: actions/upload-artifact@v4
+      with:
+        name: NetSurf-nspire
+        path: dist/NetSurf-nspire
+
+    - name: Release (tags nspire-*)
+      if: startsWith(github.ref, 'refs/tags/nspire-')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/NetSurf-nspire.tar.gz

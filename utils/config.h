@@ -106,20 +106,27 @@ char *strchrnul(const char *s, int c);
 #undef HAVE_SYS_SELECT
 #undef HAVE_POSIX_INET_HEADERS
 #endif
+/* TI-Nspire (Ndless, newlib): no socket layer at all; the frontend has its
+ * own network stack and fetcher. utils/inet.h supplies the few types. */
+#if defined(_TINSPIRE)
+#undef HAVE_POSIX_INET_HEADERS
+#define HAVE_NO_INET_HEADERS
+#endif
 
 #define HAVE_INETATON
 #if (defined(_WIN32) || \
+     defined(_TINSPIRE) || \
      defined(__serenity__))
 #undef HAVE_INETATON
 #endif
 
 #define HAVE_INETPTON
-#if (defined(_WIN32))
+#if (defined(_WIN32) || defined(_TINSPIRE))
 #undef HAVE_INETPTON
 #endif
 
 #define HAVE_UTSNAME
-#if (defined(_WIN32))
+#if (defined(_WIN32) || defined(_TINSPIRE))
 #undef HAVE_UTSNAME
 #endif
 
@@ -145,12 +152,13 @@ char *realpath(const char *path, char *resolved_path);
 #endif
 
 #define HAVE_MMAP
-#if (defined(_WIN32) || defined(__riscos__) || defined(__HAIKU__) || defined(__BEOS__) || defined(__amigaos4__) || defined(__AMIGA__) || defined(__MINT__))
+#if (defined(_WIN32) || defined(__riscos__) || defined(__HAIKU__) || defined(__BEOS__) || defined(__amigaos4__) || defined(__AMIGA__) || defined(__MINT__) || defined(_TINSPIRE))
 #undef HAVE_MMAP
 #endif
 
 #define HAVE_SCANDIR
 #if (defined(_WIN32) ||				\
+     defined(_TINSPIRE) ||			\
      defined(__serenity__))
 #undef HAVE_SCANDIR
 #endif
@@ -158,14 +166,14 @@ char *realpath(const char *path, char *resolved_path);
 #define HAVE_DIRFD
 #define HAVE_UNLINKAT
 #define HAVE_FSTATAT
-#if (defined(_WIN32) || defined(__riscos__) || defined(__HAIKU__) || defined(__BEOS__) || defined(__amigaos4__) || defined(__AMIGA__) || defined(__MINT__))
+#if (defined(_WIN32) || defined(__riscos__) || defined(__HAIKU__) || defined(__BEOS__) || defined(__amigaos4__) || defined(__AMIGA__) || defined(__MINT__) || defined(_TINSPIRE))
 #undef HAVE_DIRFD
 #undef HAVE_UNLINKAT
 #undef HAVE_FSTATAT
 #endif
 
 #define HAVE_REGEX
-#if (defined(__serenity__))
+#if (defined(__serenity__) || defined(_TINSPIRE))
 #undef HAVE_REGEX
 #endif
 
@@ -195,6 +203,8 @@ char *realpath(const char *path, char *resolved_path);
     	/* Not even BONE has it. */
     	#define NO_IPV6 1
     #endif
+#elif defined(_TINSPIRE)
+    /* no mmap() under Ndless */
 #else
     /* We're likely to have a working mmap() */
     #define WITH_MMAP

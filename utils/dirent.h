@@ -35,6 +35,12 @@
 
 #include <dirent.h>
 
+#if defined(_TINSPIRE) && !defined(st_mtime)
+/* Ndless' dirent.h brings in nucleus.h, which takes newlib's st_mtime
+ * away for a structure of its own */
+#define st_mtime st_mtim.tv_sec
+#endif
+
 #ifndef HAVE_SCANDIR
 
 int alphasort(const struct dirent **d1, const struct dirent **d2);

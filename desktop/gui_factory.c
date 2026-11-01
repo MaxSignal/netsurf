@@ -546,7 +546,12 @@ static char *gui_default_mimetype(const char *path)
 
 static int gui_default_socket_open(int domain, int type, int protocol)
 {
+#ifdef HAVE_NO_INET_HEADERS
+	/* no sockets on this platform */
+	return -1;
+#else
 	return (int) socket(domain, type, protocol);
+#endif
 }
 
 static int gui_default_socket_close(int fd)
